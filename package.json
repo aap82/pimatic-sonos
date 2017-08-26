@@ -1,0 +1,22 @@
+{
+  "name": "pimatic-sonos",
+  "description": "Pimatic plugin for Sonos System",
+  "version": "0.5.0",
+  "main": "sonos.coffee",
+  "files": [
+    "sonos.coffee",
+    "README.md",
+    "sonos-config-schema.coffee"
+  ],
+  "configSchema": "sonos-config-schema.coffee",
+  "private": true,
+  "author": "aap82",
+  "license": "MIT",
+  "dependencies": {
+    "pimatic-plugin-commons": "^0.9.5",
+    "coffee-script": "1.12.6"
+  },
+
+  "devDependencies": {},
+  "homepage": "https://github.com/aap82/pimatic-sonos#readme"
+}
