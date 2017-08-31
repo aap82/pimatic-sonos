@@ -3,75 +3,85 @@ module.exports = (env) ->
   path = env.require('path')
   http = env.require('http')
   nodeStatic = require('node-static')
+  ttsLanguages = require('./tts-providers/languages')
   createDir = require('./helpers/create-dir')(env)
-  requireDir = require('./helpers/require-dir')
-
-  singlePlayerAnnouncement = require('./helpers/single-player-announcement')
-  allPlayerAnnouncement = require('./helpers/all-player-announcement')
-
-  ttsHandler = require('./tts-providers/tts')(env)
+  readFileNames = require './helpers/walk-sync'
   sonosFileServer = undefined
+  actionFiles = readFileNames(path.join(__dirname, 'actions'), [])
+  announcers =
+    player: require('./helpers/announcements/single-player')
+    zone: require('./helpers/announcements/zone-players')
+    all: require('./helpers/announcements/all-players')
+
+
 
   class SonosApi
+    errAction: (action, err) => env.logger.error(err, "Sonos action #{action} error")
     registerAction: (action, handler) => @actions[action] = handler
+    getLanguageList: => return (key for key, value of ttsLanguages[@tts.provider])
+    getLanguage: (name) => return ttsLanguages[@tts.provider][name]
+    getClipNames: => readFileNames(@fileServer.directory + '/clips/', [] )
 
-    constructor: (@config) ->
-      {@fileServer, @tts} = @config
+    getAnnounce: => return @announcing
+    setAnnounce: (state = false) =>
+      @announcing = state
+      return
+
+
+    constructor: (@system, config) ->
+      @fileServer = null
       @server = null
+      @announcers = null
+      @tts = null
+      @announcing = no
       @actions = {}
-      if @fileServer.enabled
-        {@port, @webroot} = @fileServer
+      @playerDeviceActions = {}
+      if config.fileServer.enable
+        {@fileServer, tts} = config
+        if config.tts.enable
+          @tts = {}
+          @tts[key] = value for key, value of tts
+
+
+        @announcers = announcers
         @server = _startFileServer(@fileServer)
-      requireDir path.join(__dirname, './actions'), (registerAction) => registerAction this
 
-    command: (player, action, values) ->
-      if action in ['say', 'playClip']
-        if not @fileServer.enabled then return throw new Error("Cannot use say or playClip commands without enabling file hosting")
-        else if not @server? then return throw new Error("Http file server not running.  Please check logs.")
-        else switch action
-          when 'say' then return @say(player, values)
-          else return Promise.resolve()
-      return Promise.reject("player doesn't exist") if not player?
-      return Promise.reject("action #{action} not found") if !@actions[action]
-      values.level = values.level.replace(' ', '+') if action in ["volume","groupVolume"]
-      cmd = @actions[action] player, values
-      cmd.then(-> return Promise.resolve())
+      for file in actionFiles
+        for key, action of require("./actions/#{file}")(env, @, config)
+          return if action.files and not config.fileServer.enable
+          if action.execute? then @actions[key] = action.execute
+          if action.action? then @playerDeviceActions[key] = action.action
 
 
-    fileCommands: (player, action, values) ->
-      return @say(player, values) if action is 'say'
-      Promise.resolve()
-
-    say: (player, {text = null, volume = null, language=null,all=false }) ->
-      return Promise.reject("System isnt initialized yet") unless player?.system?
-      return Promise.reject("No text provided to say") unless text?
-      announceVolume = volume or @tts.defaultVolume
-      language = language or @tts.language
-      basePath = "http://#{player.system.localEndpoint}:#{@port}"
-      ttsHandler(@config, text, language).then (path) =>
-          finalPath = basePath + path
-          return allPlayerAnnouncement player, finalPath, announcclipNameeVolume if all
-          return singlePlayerAnnouncement player, finalPath, announceVolume
-        .catch (err) =>
-          Promise.reject(err)
+    deviceCommand: (player, action, values) ->
+      _checkReady(player).then =>
+        cmd = @actions[action] player, values
+        cmd.then(-> return Promise.resolve()).catch((err) =>
+          Promise.reject()
+        )
 
 
-
-    playClip: (player, {clipName=null, volume=null, all=false}) ->
-      return Promise.reject("fileName not provided")  unless clipName?
-      path = "http://#{player.system.localEndpoint}:#{@port}/clips/#{clipName}"
-      announceVolume = "#{volume or @tts.defaultVolume}"
-      return allPlayerAnnouncement player, path, announceVolume if all
-      return singlePlayerAnnouncement player, path, announceVolume
+#    playClip: (player, {clipName=null, volume=null, duration=null, all=false}) ->
+#      return Promise.reject("no clip provided") if clipName is null
+#      if clipName not in @getClipNames()
+#        return Promise.reject("Clip #{clipName} not found in folder #{@directory}")
+#      volume = volume or @defaultVolume
+#      path = "http://#{player.system.localEndpoint}:#{@port}/clips/#{clipName}"
+#      return _announce(player, path, volume, all)
+#
+  _checkReady = (player) ->
+    return Promise.reject("System isnt initialized yet") unless player?.system?
+    return Promise.reject("player doesn't exist") if not player?
+    return Promise.resolve()
 
 
 
 
-  _startFileServer = ({webroot, port}) ->
-    createDir(webroot)
-    createDir(webroot + '/tts/')
-    createDir(webroot + '/clips/')
-    sonosFileServer = new nodeStatic.Server(webroot)
+  _startFileServer = ({port, directory}) ->
+    createDir(directory)
+    createDir(directory + '/tts/')
+    createDir(directory + '/clips/')
+    sonosFileServer = new nodeStatic.Server(directory)
     server = http.createServer(requestHandler)
     server.listen port, ->
       env.logger.info("Sonos http file server listening on port #{port}")
@@ -94,5 +104,7 @@ module.exports = (env) ->
     .resume()
 
 
-  return SonosApi
 
+
+
+  return SonosApi

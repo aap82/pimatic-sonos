@@ -1,13 +1,12 @@
 module.exports = (env) ->
   Promise = env.require 'bluebird'
-  actions = require './actions'
   attributes = require './attributes'
 
   class SonosPlayer extends env.devices.Device
     template: 'musicplayer'
 
     attributes: attributes
-    actions: actions
+#    actions: actions
 
     _state: null
     _currentTitle: null
@@ -25,13 +24,17 @@ module.exports = (env) ->
 
     play: -> @sendCommand "play"
     pause: -> @sendCommand "pause"
+    playPause: -> @sendCommand "playPause"
     stop: -> @sendCommand "pause"
     previous: -> @sendCommand "previous"
     next: -> @sendCommand "next"
-    say: (text) -> @sendCommand "say", {text: text}
-    volume: (level) -> @sendCommand "volume", {level}
+    mute: -> @sendCommand 'mute'
+    unMute: -> @sendCommand 'unMute'
+    toggleMute: -> @sendCommand 'toggleMute'
+    setVolume: (level) -> @sendCommand "setVolume", level
+    say: (text, volume, language) -> @sendCommand "say", {text, volume, language}
 
-    sendCommand: (cmd, values) -> @api.command @player, cmd, values
+    sendCommand: (cmd, values) -> @api.deviceCommand @player, cmd, values
 
 
 
@@ -42,6 +45,7 @@ module.exports = (env) ->
       @name = @config.name
       @uuid = @config.uuid
       @api = plugin.api
+      @actions = @api.playerDeviceActions
       super()
 
       plugin.initApi.then(@init).then (player) =>
@@ -51,9 +55,9 @@ module.exports = (env) ->
 
     init: (system) =>
       player = system.getPlayerByUUID(@uuid)
-      player.on 'transport-state', @handleStateUpdate
-      player.on 'mute-change', @handleMuteUpdate
-      player.on 'volume-change', @handleVolumeUpdate
+      @stateChanges = player.on 'transport-state', @handleStateUpdate
+      @muteChanges = player.on 'mute-change', @handleMuteUpdate
+      @volumeChanges = player.on 'volume-change', @handleVolumeUpdate
       return Promise.resolve(player)
 
     handleStateUpdate: ({playbackState, mute, volume, currentTrack}) =>
@@ -83,10 +87,8 @@ module.exports = (env) ->
         return @emit attributeName, value
       return
 
-    destroy: ->
-      @player.off 'transport-state', @handleStateUpdate
-      @player.off 'mute-change', @handleMuteUpdate
-      @player.off 'volume-change', @handleVolumeUpdate
+    destroy: =>
+      @player = null
       super()
 
 

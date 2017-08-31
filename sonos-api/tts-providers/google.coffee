@@ -1,19 +1,21 @@
-module.exports = (env) ->
+module.exports = (env, {ttsPath, config}) ->
+  Promise = env.require "bluebird"
   crypto = require("crypto")
   fs = require("fs")
   http = require("http")
   path = require("path")
+  languages = require('./languages').google
+  defaultLanguageKey = languages[config.language]
 
-  google = ({fileServer}, phrase, language) ->
-    if !language
-      language = "en"
-    # Construct a filesystem neutral filename
+
+  google = (phrase, lang=null) ->
+    language = languages[lang] or defaultLanguageKey
     phraseHash = crypto.createHash("sha1").update(phrase).digest("hex")
     filename = "google-#{phraseHash}-#{language}.mp3"
-    filePath = path.resolve(fileServer.webroot, "tts", filename)
+    filePath = path.resolve(ttsPath, filename)
     expectedUri = "/tts/#{filename}"
     try
-      fs.accessSync filepath, fs.R_OK
+      fs.accessSync filePath, fs.R_OK
       return Promise.resolve(expectedUri)
     catch err
       env.logger.debug "announce file for phrase #{phrase} does not seem to exist, downloading"

@@ -24,4 +24,4 @@ jspm_packages
 
 
 /coffeelint.json
-/sonos-api/helpers/check-if-file.coffee
+/sonos-api/actions_old/

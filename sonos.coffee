@@ -6,34 +6,32 @@ module.exports = (env) ->
   SonosApi = require('./sonos-api/')(env)
   SonosPlayer = require('./sonos-player-device/sonos-player')(env)
   deviceConfigDef = require('./device-config-schema')
-  SonosSayActionProvider = require('./predicates_and_actions/say-actions')(env)
-  SonosClipsActionProvider = require('./predicates_and_actions/clip-actions')(env)
+  SonosFileActionProvider = require('./predicates_and_actions/file-action-provider')(env)
+
 
   class SonosPlugin extends env.plugins.Plugin
     prepareConfig: (conf) ->
-      {fileServer, tts} = conf
-      return unless fileServer.hostFiles
-      if tts.provider is 'voiceRss' and
-      (tts.voiceRss is '' or not tts.voiceRss?)
-        env.logger.error("ttsProvider is voiceRss, but no Api Key was provided.  Using google")
-        tts.provider = 'google'
+      return unless conf.fileServer.enable and conf.tts.enable
+      {tts} = conf
+      conf.tts.google.language = tts.language unless tts.google.language?
+      if conf.tts.provider is 'voiceRss'
+        conf.tts.voiceRss.language = tts.language unless tts.voiceRss.language?
+        conf.tts.provider = 'google' unless tts.voiceRss.key?
       return conf
 
     init: (app, @framework, @config) ->
       @debug = @framework.config.settings.debug or no
       @sonos = new SonosSystem({})
-      @api = new SonosApi(@config)
+      @api = new SonosApi(@sonos, @config)
       @initApi = @connect(@sonos)
 
       @framework.deviceManager.registerDeviceClass "SonosPlayer",
         configDef: deviceConfigDef.SonosPlayer,
         createCallback: (config) => return new SonosPlayer(config, @)
 
+
       @framework.ruleManager.addActionProvider(
-        new SonosSayActionProvider(@framework,@api, @config)
-      )
-      @framework.ruleManager.addActionProvider(
-        new SonosClipsActionProvider(@framework,@api, @config)
+        new SonosFileActionProvider(@framework,@api, @config)
       )
 
 
@@ -59,6 +57,7 @@ module.exports = (env) ->
               id: id
               name: "Sonos #{player.roomName}"
               uuid: player.uuid
+              defaultVolume: @config.fileServer.volume
               class: 'SonosPlayer'
             @framework.deviceManager.discoveredDevice 'sonos-player', "#{config.name}", config
         Promise.resolve()

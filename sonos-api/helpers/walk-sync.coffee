@@ -1,5 +1,4 @@
-module.exports = ->
-  walkSync = (dir, fileList) ->
+module.exports = (dir, fileList) ->
     fs = require('fs')
     files = fs.readdirSync(dir)
     fileList = fileList or []
@@ -11,4 +10,3 @@ module.exports = ->
       return
     fileList
 
-  walkSync

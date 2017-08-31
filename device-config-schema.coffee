@@ -7,3 +7,7 @@ module.exports =
       uuid:
         description: "Unique id of the player"
         type: "string"
+      defaultVolume:
+        description: "Volume at which tts or files will play, if not specified in request.  Defaults to defaultVolume defined in defined."
+        type: "number"
+        required: no
